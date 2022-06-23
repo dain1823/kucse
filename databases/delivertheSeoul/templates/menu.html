@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Menus</title>
+</head>
+<body>
+
+<form action="/order_received" method="POST">
+    <table border="1">
+        <thead>
+            <th>name</th>
+            <th>cost</th>
+            <th>amount(from 0 to 10)</th>
+        </thead>
+
+        <tbody>
+            <tr>
+                <td>{{ menus[0][0] }}</td>
+                <td>{{ menus[0][1] }}</td>
+                <td><input type="text" name="amount1" value=""></td>
+            </tr>
+            <tr>
+                <td>{{ menus[1][0] }}</td>
+                <td>{{ menus[1][1] }}</td>
+                <td><input type="text" name="amount2" value=""></td>
+            </tr>
+            <tr>
+                <td>{{ menus[2][0] }}</td>
+                <td>{{ menus[2][1] }}</td>
+                <td><input type="text" name="amount3" value=""></td>
+            </tr>
+        </tbody>
+    </table><br>
+
+    <input name="phone_number" type="hidden" value="{{ phone_number }}">
+    <input name="restaurant_id" type="hidden" value="{{ restaurant_id }}">
+    <input name="menu1" type="hidden" value="{{ menus[0][0] }}">
+    <input name="menu2" type="hidden" value="{{ menus[1][0] }}">
+    <input name="menu3" type="hidden" value="{{ menus[2][0] }}">
+    <input type="submit" value="done">
+</form>
+
+</body>
+</html>

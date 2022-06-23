@@ -1,0 +1,195 @@
+type program = exp
+and exp = 
+  | UNIT
+  | TRUE
+  | FALSE
+  | CONST of int
+  | VAR of var
+  | ADD of exp * exp
+  | SUB of exp * exp
+  | MUL of exp * exp
+  | DIV of exp * exp
+  | EQUAL of exp * exp
+  | LESS of exp * exp
+  | NOT of exp
+  | NIL
+  | CONS of exp * exp      
+  | APPEND of exp * exp
+  | HEAD of exp
+  | TAIL of exp
+  | ISNIL of exp
+  | IF of exp * exp * exp
+  | LET of var * exp * exp
+  | LETREC of var * var * exp * exp
+  | LETMREC of (var * var * exp) * (var * var * exp) * exp
+  | PROC of var * exp
+  | CALL of exp * exp
+  | PRINT of exp
+  | SEQ of exp * exp
+and var = string
+
+exception TypeError
+
+type typ = 
+    TyUnit 
+  | TyInt 
+  | TyBool 
+  | TyFun of typ * typ 
+  | TyList of typ
+  | TyVar of tyvar
+and tyvar = string
+
+type env = (var * typ) list
+type typeq = (typ * typ) list
+type subst = (tyvar * typ) list
+
+let empty_env = []
+let empty_subst = []
+
+let extend_env (x,a) e = (x,a)::e
+let extend_subst (v,t) s = (v,t)::s
+
+let rec lookup_typ_env : var -> env -> typ
+= fun v env ->
+  match env with
+    | [] -> raise(Failure ("Variable is not included in environment"))
+    | hd::tl ->
+      begin
+      match hd with
+        | (var, typ) -> if (v=var) then typ else lookup_typ_env v tl
+      end
+
+let rec lookup_typ_typeq : typ -> typeq -> typ
+= fun t typeq ->
+  match typeq with
+    | [] -> raise(Failure ("Type is not included in type equation"))
+    | hd::tl ->
+      begin
+      match hd with
+        | (typ1, typ2) -> if (t=typ1) then typ2 else lookup_typ_typeq t tl
+      end
+
+let rec lookup_typ_subst : tyvar -> subst -> typ
+= fun a s ->
+  match s with
+    | [] -> TyVar a
+    | hd::tl ->
+      begin
+      match hd with
+        (v, t) -> if (a = v) then t else (lookup_typ_subst a tl)
+      end
+
+(* You can invoke "fresh_tyvar()" to generate a fresh type variable *)
+let tyvar_num = ref 0
+let fresh_tyvar () = (tyvar_num := !tyvar_num + 1; (TyVar ("t" ^ string_of_int !tyvar_num)))
+
+let rec gettypeq : (env * exp * typ) -> typeq
+= fun (env, exp, t) ->
+  match exp with
+  | UNIT -> (t, TyUnit)::[]
+  | TRUE -> (t, TyBool)::[]
+  | FALSE -> (t, TyBool)::[]
+  | CONST n -> (t, TyInt)::[]
+  | VAR v -> (t, lookup_typ_env v env)::[]
+  | ADD (e1, e2) -> (t, TyInt)::(gettypeq (env, e1, TyInt))@(gettypeq (env, e2, TyInt))
+  | SUB (e1, e2) -> (t, TyInt)::(gettypeq (env, e1, TyInt))@(gettypeq (env, e2, TyInt))
+  | MUL (e1, e2) -> (t, TyInt)::(gettypeq (env, e1, TyInt))@(gettypeq (env, e2, TyInt))
+  | DIV (e1, e2) -> (t, TyInt)::(gettypeq (env, e1, TyInt))@(gettypeq (env, e2, TyInt))
+  | EQUAL (e1, e2) -> let a = fresh_tyvar () in (t, TyBool)::(gettypeq (env, e1, a))@(gettypeq (env, e2, a))
+  | LESS (e1, e2) -> (t, TyBool)::(gettypeq (env, e1, TyInt))@(gettypeq (env, e2, TyInt))
+  | NOT e -> (t, TyBool)::(gettypeq (env, e, TyBool))
+  
+  | NIL -> (t, TyList ( TyVar "t" ))::[]
+  | CONS (e1, e2) -> let a = fresh_tyvar () in (t, TyList a)::(gettypeq (env, e1, a))@(gettypeq (env, e2, TyList a))
+  | APPEND (e1, e2) -> let a = fresh_tyvar () in (t, TyList a)::(gettypeq (env, e1, TyList a))@(gettypeq (env, e2, TyList a))
+  | HEAD e ->
+    begin
+    match (lookup_typ_typeq t (gettypeq (env, e, t))) with
+      | TyList a -> (t, a)::[]
+      | _ -> (t, (lookup_typ_typeq t (gettypeq (env, e, t))))::[]
+    end
+  | TAIL e -> 
+    begin
+    match (lookup_typ_typeq t (gettypeq (env, e, t))) with
+      | TyList a -> (t, TyList a)::[]
+      | _ -> (t, TyList (lookup_typ_typeq t (gettypeq (env, e, t))))::[]
+    end 
+  | ISNIL e -> let a = fresh_tyvar () in (t, TyBool)::(gettypeq (env, e, a))
+  
+  | IF (e1, e2, e3) -> (gettypeq (env, e1, TyBool))@(gettypeq (env, e2, t))@(gettypeq (env, e3, t))
+  | LET (x, e1, e2) -> let a = fresh_tyvar () in (gettypeq (env, e1, a))@(gettypeq ((extend_env (x, a) env), e2, t))
+  | LETREC (f, x, e1, e2) ->
+    let a1 = fresh_tyvar ()
+    in ( let a2 = fresh_tyvar ()
+    in (gettypeq (( extend_env (f, TyFun (a1, a2)) (extend_env (x, a1) env) ), e1, a2))@(gettypeq ((extend_env (f, TyFun (a1, a2)) env), e2, t)) )
+  | LETMREC ((f, x, e1), (g, y, e2), e3) -> 
+    let a1 = fresh_tyvar ()
+    in ( let a2 = fresh_tyvar ()
+    in (gettypeq (( extend_env (f, TyFun (a1, a2)) (extend_env (x, a1) env) ), e1, a2))@(gettypeq (( extend_env (g, TyFun (a1, a2)) (extend_env (y, a1) env) ), e2, a2))
+    @(gettypeq ((extend_env (f, TyFun (a1, a2)) (extend_env (g, TyFun (a1, a2)) env)), e3, t)) )
+  | PROC (x, e) -> let a1 = fresh_tyvar () in (let a2= fresh_tyvar () in (t, TyFun (a1, a2))::(gettypeq ((extend_env (x, a1) env), e, a2)))
+  | CALL (e1, e2) -> let a = fresh_tyvar () in (gettypeq (env, e1, TyFun (a, t)))@(gettypeq (env, e2, a))
+  | PRINT e -> (t, TyUnit)::[]
+  | SEQ (e1, e2) -> (gettypeq (env, e2, t))
+  | _ -> raise TypeError
+
+let rec occurs : tyvar -> typ -> bool
+= fun a t ->
+  match t with
+    | TyFun (t1, t2) -> (occurs a t1) || (occurs a t2)
+    | TyList typ -> occurs a typ
+    | TyVar v -> if (v = a) then true else false
+    | _ -> false
+
+let rec apply : typ -> subst -> typ
+= fun t s ->
+  match t with
+    | TyUnit -> TyUnit
+    | TyInt -> TyInt
+    | TyBool -> TyBool
+    | TyVar a -> lookup_typ_subst a s
+    | TyFun (t1, t2) -> TyFun ((apply t1 s), (apply t2 s))
+    | TyList t -> TyList (apply t s)
+
+let rec mdfy : tyvar -> typ -> typ -> typ
+= fun a typ t ->
+  match t with
+    | TyVar b -> if (a = b) then typ else t
+    | TyFun (t1, t2) -> TyFun ((mdfy a typ t1), (mdfy a typ t2))
+    | TyList b -> TyList (mdfy a typ b)
+    | _ -> t
+
+let rec modify_s : tyvar -> typ -> subst -> subst
+= fun a typ s ->
+  match s with
+    | [] -> []
+    | hd::tl -> let (v, t) = hd in (v, (mdfy a typ t))::(modify_s a typ tl)
+
+let rec unify : typ -> typ -> subst -> subst
+= fun t1 t2 s ->
+  match (t1, t2, s) with
+    | (TyUnit, TyUnit, s) -> s
+    | (TyInt, TyInt, s) -> s
+    | (TyBool, TyBool, s) -> s
+    | (TyVar a, t, s) -> if (occurs a t) then (if t = (TyVar a) then s else raise TypeError) else (extend_subst (a, t) (modify_s a t s))
+    | (t, TyVar a, s) -> unify (TyVar a) t s
+    | (TyFun (t1, t2), TyFun (t1p, t2p), s) -> let sp = (unify t1 t1p s) in (let sdp = (unify (apply t2 sp) (apply t2p sp) sp) in sdp)
+    | (_, _, _) -> raise TypeError
+
+let rec unifyall : typeq -> subst -> subst
+= fun typeq s ->
+  match typeq with
+    | [] -> s
+    | (t1, t2)::u -> let sp = (unify (apply t1 s) (apply t2 s) s) in (unifyall u sp)
+
+let typeof : exp -> typ 
+=fun exp ->  (* TODO *)
+  let a = fresh_tyvar () in (
+    let s = (unifyall (gettypeq (empty_env, exp, a)) empty_subst) in (apply a s) );;
+
+typeof (
+  PROC ("f",
+
+PROC ("x", SUB (CALL (VAR "f", CONST 3),
+CALL (VAR "f", VAR "x"))))
+  )

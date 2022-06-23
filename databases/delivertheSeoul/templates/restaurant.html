@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Restaurants</title>
+</head>
+<body>
+
+<table border="1">
+    <thead>
+        <th>name</th>
+        <th>category</th>
+        <th>rate</th>
+        <th>tip</th>
+        <th>expected time</th>
+    </thead>
+
+    <tbody>
+        {% for mem in restaurants %}
+        <tr>
+            <td>{{ mem[0] }}</td>
+            <td>{{ mem[1] }}</td>
+            <td>{{ mem[2] }}</td>
+            <td>{{ mem[3] }}</td>
+            <td>{{ mem[4] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<br>
+
+<form action="/print_menu" method="POST">
+    <input name="phone_number" type="hidden" value="{{ phone_number }}">
+    <label>Enter the name of the restaurant. <input type="text" name="restaurant" value=""></label><br><br>
+    <input type="submit" value="submit">
+</form>
+
+</body>
+</html>
